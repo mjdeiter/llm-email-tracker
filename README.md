@@ -14,7 +14,6 @@ A lightweight Qt6 desktop utility for tracking email addresses used in LLM workf
 - **Resets field** — manual text field per row for tracking reset events or notes
 - **Reset All button** — clears all Status toggles, Auto Timestamps, and Resets fields in one click
 - **Persistent storage** — saves/loads state from `~/.config/email_tracker_data.json`
-- **Custom SVG icon** — auto-generated on first launch to `~/.config/email_tracker_icon.svg`
 
 ## Requirements
 
