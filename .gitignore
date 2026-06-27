@@ -1,1 +1,13 @@
-build/
+# CMake build artifacts
+build/CMakeFiles/
+build/CMakeCache.txt
+build/cmake_install.cmake
+build/Makefile
+build/.qt/
+build/EmailTracker_autogen/
+build/*.make
+build/*.d
+build/*.o
+
+# Backup files
+*.bak
