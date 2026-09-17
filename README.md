@@ -13,6 +13,7 @@ A lightweight Qt6 desktop utility for tracking email addresses used in LLM workf
 - **Auto Timestamp** — automatically captures date and time when a row is marked Used
 - **Resets field** — manual text field per row for tracking reset events or notes
 - **Reset All button** — clears all Status toggles, Auto Timestamps, and Resets fields in one click
+- **Copy button** — copies a row's email address to the clipboard, with a "Copied!" confirmation
 - **Persistent storage** — saves/loads state from `~/.config/email_tracker_data.json`
 
 ## Requirements

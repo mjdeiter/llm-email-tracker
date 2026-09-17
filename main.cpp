@@ -16,6 +16,9 @@
 #include <QList>
 #include <QStringList>
 #include <QIcon>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QTimer>
 
 class EmailRow : public QWidget {
     Q_OBJECT
@@ -24,6 +27,7 @@ public:
     QRadioButton* usedButton;
     QLabel* timestampLabel;
     QLineEdit* manualDateTimeEdit;
+    QPushButton* copyButton;
     QString rawTimestamp;
 
     EmailRow(QWidget* parent = nullptr) : QWidget(parent) {
@@ -58,13 +62,18 @@ public:
             "}"
         );
 
+        copyButton = new QPushButton("Copy", this);
+        copyButton->setFixedWidth(60);
+
         layout->addWidget(emailEdit);
         layout->addWidget(usedButton);
         layout->addWidget(timestampLabel);
         layout->addWidget(manualDateTimeEdit);
+        layout->addWidget(copyButton);
         layout->addStretch();
 
         connect(usedButton, &QRadioButton::toggled, this, &EmailRow::handleToggled);
+        connect(copyButton, &QPushButton::clicked, this, &EmailRow::copyEmailToClipboard);
     }
 
     void displayTimestamp() {
@@ -105,6 +114,14 @@ private slots:
             rawTimestamp.clear();
         }
         displayTimestamp();
+    }
+
+    void copyEmailToClipboard() {
+        QGuiApplication::clipboard()->setText(emailEdit->text());
+        copyButton->setText("Copied!");
+        QTimer::singleShot(1000, this, [this]() {
+            copyButton->setText("Copy");
+        });
     }
 };
 
@@ -147,10 +164,15 @@ public:
         resetsHeader->setFixedWidth(180);
         resetsHeader->setStyleSheet(headerStyle);
 
+        QLabel* actionsHeader = new QLabel("", this);
+        actionsHeader->setFixedWidth(60);
+        actionsHeader->setStyleSheet(headerStyle);
+
         headerLayout->addWidget(emailHeader);
         headerLayout->addWidget(statusHeader);
         headerLayout->addWidget(timeHeader);
         headerLayout->addWidget(resetsHeader);
+        headerLayout->addWidget(actionsHeader);
         headerLayout->addStretch();
 
         mainLayout->addLayout(headerLayout);

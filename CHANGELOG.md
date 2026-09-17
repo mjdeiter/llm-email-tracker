@@ -2,6 +2,11 @@
 
 All notable changes to LLM Email Tracker are documented here.
 
+## [1.1.0] - 2026-09-17
+
+### Added
+- **Copy button** per row — copies the row's email address to the clipboard, with a brief "Copied!" confirmation on the button itself
+
 ## [1.0.0] - 2026-06-27
 
 ### Added
