@@ -14,7 +14,7 @@ A lightweight Qt6 desktop utility for tracking email addresses used in LLM workf
 - **Resets field** — manual text field per row for tracking reset events or notes
 - **Reset All button** — clears all Status toggles, Auto Timestamps, and Resets fields in one click
 - **Copy button** — copies a row's email address to the clipboard, with a "Copied!" confirmation
-- **Persistent storage** — saves/loads state from `~/.config/email_tracker_data.json`
+- **Live save** — every edit is saved automatically, so the app reopens exactly as you left it (stored in `~/.config/email_tracker_data.json`)
 
 ## Requirements
 
@@ -67,10 +67,10 @@ Run the binary:
 ```
 
 - **Add Row** — appends a new empty row
-- **Save Config** — persists all rows to `~/.config/email_tracker_data.json`
+- **Save Config** — forces an immediate save (optional; changes are already saved automatically as you edit)
 - **Reset All** — clears Status, Auto Timestamp, and Resets on every row (does not affect email addresses)
 
-State is saved manually with **Save Config** (except **Reset All**, which saves immediately); the app reloads your last saved state on next launch.
+Changes are saved automatically a moment after each edit, and any pending change is written when you close or quit the app. The app reloads that state on next launch. Rows that are completely empty (no email, not Used, no Resets text) are not saved.
 
 ## Data Storage
 

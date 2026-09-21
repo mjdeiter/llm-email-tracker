@@ -1,3 +1,20 @@
+// ============================================================================
+// Email Status Tracker (LLM Email Tracker)
+// Version: 1.2.0
+// Date:    2026-09-21
+//
+// Changelog:
+//   1.2.0  Live save: every edit is persisted automatically (debounced), and
+//          any pending change is flushed when the window closes or the app
+//          quits, so the app reopens exactly as it was left.
+//          - Atomic writes via QSaveFile (no truncated JSON on crash)
+//          - Unparseable data file is moved aside instead of overwritten
+//          - Email addresses are trimmed on load and save
+//   1.1.1  Reset All saves immediately
+//   1.1.0  Per-row Copy button
+//   1.0.0  Initial release
+// ============================================================================
+
 #include <QApplication>
 #include <QWidget>
 #include <QVBoxLayout>
@@ -9,7 +26,10 @@
 #include <QScrollArea>
 #include <QDateTime>
 #include <QFile>
+#include <QFileInfo>
+#include <QSaveFile>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QDir>
@@ -18,6 +38,7 @@
 #include <QIcon>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QCloseEvent>
 #include <QTimer>
 
 class EmailRow : public QWidget {
@@ -72,8 +93,15 @@ public:
         layout->addWidget(copyButton);
         layout->addStretch();
 
+        // Order matters only for clarity: handleToggled sets the timestamp,
+        // then changed() schedules the (debounced) save.
         connect(usedButton, &QRadioButton::toggled, this, &EmailRow::handleToggled);
         connect(copyButton, &QPushButton::clicked, this, &EmailRow::copyEmailToClipboard);
+
+        // Anything the user can edit on this row counts as a change (live save)
+        connect(emailEdit, &QLineEdit::textChanged, this, &EmailRow::changed);
+        connect(manualDateTimeEdit, &QLineEdit::textChanged, this, &EmailRow::changed);
+        connect(usedButton, &QRadioButton::toggled, this, &EmailRow::changed);
     }
 
     void displayTimestamp() {
@@ -104,6 +132,9 @@ public:
         manualDateTimeEdit->clear();
     }
 
+signals:
+    void changed();
+
 private slots:
     void handleToggled(bool checked) {
         if (checked) {
@@ -132,6 +163,8 @@ private:
     QWidget* scrollContainer;
     QList<EmailRow*> rows;
     QString savePath;
+    QTimer* saveTimer;      // debounce timer for live save
+    bool loading = false;   // true while populating rows from disk
 
 public:
     MainWidget(QWidget* parent = nullptr) : QWidget(parent) {
@@ -139,6 +172,12 @@ public:
         resize(850, 500);
 
         savePath = QDir::homePath() + "/.config/email_tracker_data.json";
+
+        // Live save: edits restart this timer; when it fires, data is written.
+        saveTimer = new QTimer(this);
+        saveTimer->setSingleShot(true);
+        saveTimer->setInterval(400);
+        connect(saveTimer, &QTimer::timeout, this, &MainWidget::saveData);
 
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
@@ -220,78 +259,77 @@ public:
         mainLayout->addLayout(buttonLayout);
 
         connect(addButton, &QPushButton::clicked, this, &MainWidget::addNewRow);
-        connect(saveButton, &QPushButton::clicked, this, &MainWidget::saveData);
+        connect(saveButton, &QPushButton::clicked, this, &MainWidget::saveData);  // manual save still works
         connect(resetAllButton, &QPushButton::clicked, this, &MainWidget::resetAll);
 
         loadData();
     }
 
-    void addNewRow() {
+    // Creates a row, wires it into live save, and appends it to the list
+    EmailRow* createRow() {
         EmailRow* row = new EmailRow(scrollContainer);
+        connect(row, &EmailRow::changed, this, &MainWidget::scheduleSave);
         rowsLayout->addWidget(row);
         rows.append(row);
+        return row;
     }
 
-    void saveData() {
+    void addNewRow() {
+        createRow();  // a blank row has nothing to persist until it is edited
+    }
+
+    // Restart the debounce timer; the actual write happens once edits pause
+    void scheduleSave() {
+        if (!loading) {
+            saveTimer->start();
+        }
+    }
+
+    bool saveData() {
+        saveTimer->stop();  // any pending debounced save is superseded by this one
+
         QJsonArray jsonArray;
         for (EmailRow* row : rows) {
-            if (row->emailEdit->text().isEmpty() &&
+            const QString email = row->emailEdit->text().trimmed();
+            if (email.isEmpty() &&
                 !row->usedButton->isChecked() &&
                 row->manualDateTimeEdit->text().isEmpty()) {
                 continue;
-                }
-                QJsonObject rowObject;
-            rowObject["email"] = row->emailEdit->text();
+            }
+            QJsonObject rowObject;
+            rowObject["email"] = email;
             rowObject["used"] = row->usedButton->isChecked();
             rowObject["timestamp"] = row->rawTimestamp;
             rowObject["resets"] = row->manualDateTimeEdit->text();
             jsonArray.append(rowObject);
         }
 
-        QJsonDocument doc(jsonArray);
-        QFile file(savePath);
-        if (file.open(QIODevice::WriteOnly)) {
-            file.write(doc.toJson());
-            file.close();
+        QDir().mkpath(QFileInfo(savePath).absolutePath());
+
+        // QSaveFile writes to a temp file and renames on commit, so a crash or
+        // power loss mid-write can never leave a half-written data file behind.
+        QSaveFile file(savePath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning("EmailTracker: cannot open %s for writing: %s",
+                     qPrintable(savePath), qPrintable(file.errorString()));
+            return false;
         }
+        file.write(QJsonDocument(jsonArray).toJson());
+        if (!file.commit()) {
+            qWarning("EmailTracker: failed to save %s: %s",
+                     qPrintable(savePath), qPrintable(file.errorString()));
+            return false;
+        }
+        return true;
     }
 
     void loadData() {
-        QFile file(savePath);
-        if (!file.open(QIODevice::ReadOnly)) {
-            addNewRow();
-            return;
+        loading = true;   // programmatic setText/setChecked below must not trigger saves
+        readRowsFromDisk();
+        if (rows.isEmpty()) {
+            createRow();
         }
-
-        QByteArray data = file.readAll();
-        file.close();
-
-        QJsonDocument doc = QJsonDocument::fromJson(data);
-        QJsonArray jsonArray = doc.array();
-
-        if (jsonArray.isEmpty()) {
-            addNewRow();
-            return;
-        }
-
-        for (int i = 0; i < jsonArray.size(); ++i) {
-            QJsonObject rowObject = jsonArray[i].toObject();
-            EmailRow* row = new EmailRow(scrollContainer);
-
-            row->emailEdit->setText(rowObject["email"].toString());
-
-            row->usedButton->blockSignals(true);
-            row->usedButton->setChecked(rowObject["used"].toBool());
-            row->usedButton->blockSignals(false);
-
-            row->rawTimestamp = rowObject["timestamp"].toString();
-            row->displayTimestamp();
-
-            row->manualDateTimeEdit->setText(rowObject["resets"].toString());
-
-            rowsLayout->addWidget(row);
-            rows.append(row);
-        }
+        loading = false;
     }
 
 public slots:
@@ -301,11 +339,72 @@ public slots:
         }
         saveData();  // persist immediately so the reset survives closing the app
     }
+
+    // Write any not-yet-saved edits. Called on window close and app quit.
+    void flushSave() {
+        if (saveTimer->isActive()) {
+            saveData();
+        }
+    }
+
+protected:
+    void closeEvent(QCloseEvent* event) override {
+        flushSave();
+        QWidget::closeEvent(event);
+    }
+
+private:
+    void readRowsFromDisk() {
+        QFile file(savePath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            return;  // first run: no data file yet
+        }
+
+        QByteArray data = file.readAll();
+        file.close();
+        if (data.trimmed().isEmpty()) {
+            return;
+        }
+
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+            // Don't let live save silently overwrite a file we couldn't read:
+            // move it aside so the original data can still be recovered.
+            const QString backup = savePath + ".corrupt-" +
+                QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+            QFile::rename(savePath, backup);
+            qWarning("EmailTracker: %s is not valid tracker data; moved to %s",
+                     qPrintable(savePath), qPrintable(backup));
+            return;
+        }
+
+        QJsonArray jsonArray = doc.array();
+        for (int i = 0; i < jsonArray.size(); ++i) {
+            QJsonObject rowObject = jsonArray[i].toObject();
+            EmailRow* row = createRow();
+
+            row->emailEdit->setText(rowObject["email"].toString().trimmed());
+
+            row->usedButton->blockSignals(true);
+            row->usedButton->setChecked(rowObject["used"].toBool());
+            row->usedButton->blockSignals(false);
+
+            row->rawTimestamp = rowObject["timestamp"].toString();
+            row->displayTimestamp();
+
+            row->manualDateTimeEdit->setText(rowObject["resets"].toString());
+        }
+    }
 };
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     MainWidget window;
+
+    // Cmd+Q / Dock "Quit" / logout quit the app without necessarily closing the
+    // window first, so flush any pending edit here as well as in closeEvent.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &window, &MainWidget::flushSave);
 
     // --- Embedded Custom Colored Icon ---
     QString iconPath = QDir::homePath() + "/.config/email_tracker_icon.svg";

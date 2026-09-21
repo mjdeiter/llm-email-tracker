@@ -2,6 +2,18 @@
 
 All notable changes to LLM Email Tracker are documented here.
 
+## [1.2.0] - 2026-09-21
+
+### Added
+- **Live save**: every edit (email, Used, Resets) is now saved automatically about 400 ms after you stop typing, and any pending change is written when the window is closed or the app is quit (including Cmd+Q). The app reopens exactly as you left it; **Save Config** is no longer required
+
+### Changed
+- Data file is written atomically (temp file + rename), so a crash or power loss mid-save cannot corrupt it
+- Email addresses are trimmed of surrounding whitespace/newlines when loading and saving
+
+### Fixed
+- If `email_tracker_data.json` cannot be parsed, it is now moved aside to `email_tracker_data.json.corrupt-<timestamp>` instead of being silently overwritten by the next save
+
 ## [1.1.1] - 2026-09-21
 
 ### Added
