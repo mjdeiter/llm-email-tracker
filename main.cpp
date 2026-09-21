@@ -299,6 +299,7 @@ public slots:
         for (EmailRow* row : rows) {
             row->resetRow();
         }
+        saveData();  // persist immediately so the reset survives closing the app
     }
 };
 

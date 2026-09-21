@@ -2,6 +2,11 @@
 
 All notable changes to LLM Email Tracker are documented here.
 
+## [1.1.1] - 2026-09-21
+
+### Fixed
+- **Reset All** now saves immediately. Previously it only cleared the on-screen rows, so the old data came back after closing and reopening unless Save Config was clicked first
+
 ## [1.1.0] - 2026-09-17
 
 ### Added
