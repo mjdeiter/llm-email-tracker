@@ -4,6 +4,9 @@ All notable changes to LLM Email Tracker are documented here.
 
 ## [1.1.1] - 2026-09-21
 
+### Added
+- macOS (Apple Silicon) support: `macos/build-app.sh` builds an ad-hoc signed `Email Tracker.app`, and a pre-built copy is included at `macos/Email-Tracker-macOS-arm64.zip`
+
 ### Fixed
 - **Reset All** now saves immediately. Previously it only cleared the on-screen rows, so the old data came back after closing and reopening unless Save Config was clicked first
 

@@ -11,3 +11,8 @@ build/*.o
 
 # Backup files
 *.bak
+
+# macOS build output
+build-macos/
+dist/
+.DS_Store
